@@ -26,15 +26,6 @@ def text_to_speech(text):
 
 # 3. INTERFACE
 st.title("🎙️ My Voice AI")
-# --- DEBUGGING TOOL ---
-st.write("Checking available models...")
-try:
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            st.write(f"✅ Found model: {m.name}")
-except Exception as e:
-    st.error(f"Could not list models: {e}")
-# -----------------------
 # Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -73,7 +64,7 @@ if prompt:
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
-                model = genai.GenerativeModel("gemini-pro")
+                model = genai.GenerativeModel("models/gemini-2.5-pro")
                 
                 # Build Payload
                 content = []
@@ -98,6 +89,7 @@ if prompt:
             except Exception as e:
 
                 st.error(f"Error: {e}")
+
 
 
 

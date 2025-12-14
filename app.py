@@ -8,8 +8,7 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="My AI", page_icon="🎙️")
 
 if "GOOGLE_API_KEY" in st.secrets:
-    # ✅ CORRECT
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("API Key missing. Please set it in Streamlit Secrets.")
     st.stop()
@@ -91,4 +90,5 @@ if prompt:
             except Exception as e:
 
                 st.error(f"Error: {e}")
+
 

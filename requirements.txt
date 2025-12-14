@@ -2,5 +2,5 @@ streamlit
 google-generativeai
 PyPDF2
 Pillow
-gtts
+edge-tts
 streamlit-mic-recorder

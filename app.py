@@ -65,7 +65,7 @@ if prompt:
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-1.5-flash-latest")
                 
                 # Build Payload
                 content = []
@@ -90,5 +90,6 @@ if prompt:
             except Exception as e:
 
                 st.error(f"Error: {e}")
+
 
 

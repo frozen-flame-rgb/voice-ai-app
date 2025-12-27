@@ -71,7 +71,7 @@ if user_prompt:
 
     try:
         # Use Gemini 2.0 Flash for native image generation support
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("models/gemini-flash-latest")
         
         inputs = []
         if camera_image:
@@ -103,3 +103,4 @@ if user_prompt:
 
     except Exception as e:
         status.error(f"SYSTEM ERROR: {e}")
+

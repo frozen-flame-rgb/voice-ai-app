@@ -28,7 +28,11 @@ else:
     st.error("API Key Missing")
     st.stop()
 
-# --- 2. LOGIC FUNCTIONS ---
+# --- 2. INITIALIZE SESSION STATE (MEMORY) ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# --- 3. LOGIC FUNCTIONS ---
 def clean_text(text):
     """Removes Markdown symbols so the voice is smooth."""
     clean = re.sub(r'[*#`]', '', text) 
@@ -41,79 +45,114 @@ async def speak(text):
     await communicate.save(OUTPUT_FILE)
     return OUTPUT_FILE
 
-# --- 3. THE INTERFACE ---
+# --- 4. THE INTERFACE ---
 st.markdown("<h1 style='text-align: center; color: #00ffcc; font-family: Courier New;'>J.A.R.V.I.S.</h1>", unsafe_allow_html=True)
 
-# A. CAMERA TOGGLE
-use_vision = st.checkbox("👁️ Enable Vision System")
+# A. SETTINGS (Camera & Mic)
+with st.expander("⚙️ System Controls", expanded=True):
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        use_vision = st.checkbox("👁️ Enable Vision", value=False)
+    with c2:
+        # Audio Input
+        audio_input = mic_recorder(
+            start_prompt="🔴 Speak",
+            stop_prompt="⏹️ Stop",
+            key="recorder",
+            just_once=True,
+            use_container_width=True
+        )
 
+# Camera Input (Only if enabled)
 camera_image = None
 if use_vision:
     camera_image = st.camera_input("Visual Feed")
 
-# B. VOICE COMMAND
-st.write("---")
-c1, c2, c3 = st.columns([1, 3, 1])
-with c2:
-    audio_input = mic_recorder(
-        start_prompt="🔴 VOICE COMMAND",
-        stop_prompt="⏹️ PROCESSING...",
-        key="recorder",
-        just_once=True,
-        use_container_width=True
-    )
+# --- 5. DISPLAY CHAT HISTORY ---
+# This loop draws all previous messages every time the app updates
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# C. NEW SEARCH BAR (Chat Input)
+# --- 6. HANDLE NEW INPUT ---
+# Check if user typed OR spoke
 typed_input = st.chat_input("Type your command, Sir...")
 
-# --- 4. EXECUTION ---
-# This part triggers if there is EITHER audio input OR typed input
-if audio_input or typed_input:
-    # Status Indicator
-    status = st.empty()
-    status.info("⚡ Authenticating...")
+user_prompt = None
+vision_context = None
 
+# Priority: Audio > Text
+if audio_input:
+    # We can't transcribe raw bytes easily without an STT model, 
+    # so we send the audio directly to Gemini if possible, 
+    # OR we treat it as an audio prompt. 
+    # For this code, we rely on Gemini to listen to the audio.
+    user_prompt = {"mime_type": "audio/wav", "data": audio_input['bytes']}
+elif typed_input:
+    user_prompt = typed_input
+
+# Execute if we have input
+if user_prompt:
+    # 1. Display User Message
+    with st.chat_message("user"):
+        if isinstance(user_prompt, str):
+            st.markdown(user_prompt)
+        else:
+            st.markdown("*🎤 [Audio Command]*")
+    
+    # 2. Add User Message to History (Text representation)
+    if isinstance(user_prompt, str):
+        st.session_state.messages.append({"role": "user", "content": user_prompt})
+    else:
+        st.session_state.messages.append({"role": "user", "content": "*🎤 [Audio Command]*"})
+
+    # 3. Process with Gemini
     try:
-        # Load Model
         model = genai.GenerativeModel("models/gemini-flash-latest")
         
-        # PREPARE INPUTS
-        inputs = []
+        # Build the conversation history for the model
+        # Note: Gemini Python SDK 'start_chat' is great for text, 
+        # but for multimodal (images/audio), list construction is often easier.
+        conversation_history = []
         
-        # Determine the user's prompt (Audio or Text)
-        prompt_text = "You are JARVIS. Be concise."
+        # Add system instruction
+        conversation_history.append("You are J.A.R.V.I.S. You are helpful, precise, and concise.")
         
-        # Case 1: Handle Vision
+        # Add past text interaction context (Simple memory)
+        # (We skip heavy images/audio from history to save tokens/complexity for now)
+        for msg in st.session_state.messages[-10:]: # Remember last 10 messages
+            if msg["role"] == "user":
+                conversation_history.append(f"User said: {msg['content']}")
+            else:
+                conversation_history.append(f"JARVIS said: {msg['content']}")
+
+        # Prepare Current Inputs
+        inputs = conversation_history # Start with context
+        
+        # Add Image if present
         if use_vision and camera_image:
             img = Image.open(camera_image)
             inputs.append(img)
+            inputs.append("Analyze this image based on the following command:")
 
-        # Case 2: Handle Audio
-        if audio_input:
-            inputs.append({"mime_type": "audio/wav", "data": audio_input['bytes']})
-            if use_vision and camera_image:
-                inputs.append(f"{prompt_text} Analyze this image based on the audio.")
-            else:
-                inputs.append(f"{prompt_text} Listen to this audio and reply.")
-        
-        # Case 3: Handle Typing
-        elif typed_input:
-            if use_vision and camera_image:
-                inputs.append(f"{prompt_text} Analyze the image: {typed_input}")
-            else:
-                inputs.append(f"{prompt_text} Answer this: {typed_input}")
+        # Add the User Command (Text or Audio)
+        inputs.append(user_prompt)
 
         # GENERATE
-        status.info("⚡ Computing...")
-        response = model.generate_content(inputs)
-        reply = response.text
+        with st.spinner("⚡ Computing..."):
+            response = model.generate_content(inputs)
+            reply = response.text
+
+        # 4. Display AI Response
+        with st.chat_message("assistant"):
+            st.markdown(reply)
         
-        # DISPLAY & SPEAK
-        status.success(f"🤖 {reply}")
-        
-        # Generate Audio
+        # 5. Add AI Response to History
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+
+        # 6. Speak Logic
         audio_file = asyncio.run(speak(reply))
         st.audio(audio_file, format='audio/mp3', autoplay=True)
 
     except Exception as e:
-        status.error(f"ERROR: {e}")
+        st.error(f"System Error: {e}")
